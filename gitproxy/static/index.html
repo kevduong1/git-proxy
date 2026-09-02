@@ -1,0 +1,321 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>git-proxy</title>
+<style>
+:root{
+  --bg:#0f1115;--panel:#171a21;--panel2:#1e222b;--border:#2a2f3a;--text:#e6e8ee;--muted:#8b93a7;
+  --accent:#6ea8fe;--accent2:#2f6df6;--ok:#3ddc97;--warn:#f5b84c;--bad:#ff6b6b;--guest:#c792ea;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,sans-serif}
+a{color:var(--accent)}
+button{font:inherit;color:var(--text);background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:7px 12px;cursor:pointer}
+button:hover{border-color:var(--accent)}
+button:disabled{opacity:.45;cursor:default}
+button.primary{background:var(--accent2);border-color:var(--accent2)}
+button.primary:hover{filter:brightness(1.1)}
+button.danger{border-color:#5a2a2a;color:#ffb0b0}
+button.small{padding:4px 9px;font-size:12px;border-radius:6px}
+input,select,textarea{font:inherit;color:var(--text);background:#0d0f13;border:1px solid var(--border);border-radius:8px;padding:8px 10px;width:100%}
+input:focus,select:focus{outline:none;border-color:var(--accent)}
+label{display:block;font-size:12px;color:var(--muted);margin:10px 0 4px}
+label.inline{display:flex;align-items:center;gap:8px;color:var(--text);font-size:13px;margin-top:12px}
+label.inline input{width:auto}
+.layout{display:grid;grid-template-columns:270px 1fr;min-height:100vh}
+.side{background:var(--panel);border-right:1px solid var(--border);padding:18px 14px;display:flex;flex-direction:column;gap:18px}
+.brand{font-weight:700;font-size:18px;letter-spacing:.3px;display:flex;align-items:center;gap:8px}
+.brand small{font-weight:400;color:var(--muted);font-size:11px}
+.navsec h4{margin:0 0 6px;font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);display:flex;justify-content:space-between;align-items:center}
+.navitem{padding:8px 10px;border-radius:8px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:6px}
+.navitem:hover{background:var(--panel2)}
+.navitem.active{background:var(--panel2);outline:1px solid var(--border)}
+.navitem .sub{color:var(--muted);font-size:11px;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:190px}
+.main{padding:22px 26px;max-width:1300px}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+.grid2{display:grid;grid-template-columns:1fr 150px 1fr;gap:14px;align-items:stretch}
+.arrows{display:flex;flex-direction:column;justify-content:center;gap:10px}
+.arrows button{white-space:nowrap}
+.card h3{margin:0 0 8px;font-size:15px;display:flex;justify-content:space-between;align-items:center}
+.kv{display:grid;grid-template-columns:90px 1fr;gap:3px 10px;font-size:13px;margin:8px 0}
+.kv .k{color:var(--muted)}
+.kv .v{font-family:var(--mono);font-size:12px;overflow-wrap:anywhere}
+.pill{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:600;border:1px solid transparent}
+.pill.ok{background:#12352a;color:var(--ok)}
+.pill.warn{background:#3a2d12;color:var(--warn)}
+.pill.bad{background:#3a1717;color:var(--bad)}
+.pill.muted{background:#242833;color:var(--muted)}
+.pill.rewrite{background:#1c2c4d;color:var(--accent)}
+.pill.restore{background:#12352a;color:var(--ok)}
+.pill.guest{background:#2e1f42;color:var(--guest)}
+.pill.keep,.pill.skipped{background:#242833;color:var(--muted)}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.section{margin-top:18px}
+.section h2{font-size:14px;margin:0 0 10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;display:flex;justify-content:space-between;align-items:center}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{text-align:left;padding:7px 8px;border-bottom:1px solid var(--border);vertical-align:top}
+th{color:var(--muted);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.6px}
+td.mono{font-family:var(--mono);font-size:12px;white-space:nowrap}
+.log{background:#0a0c10;border:1px solid var(--border);border-radius:10px;padding:12px;font-family:var(--mono);font-size:12px;white-space:pre-wrap;max-height:280px;overflow:auto;color:#c9d1d9}
+.log .err{color:var(--bad)}
+.banner{border-radius:10px;padding:12px 14px;margin-bottom:14px;border:1px solid}
+.banner.conflict{background:#3a2412;border-color:#7a4a1a;color:#ffd7a8}
+.banner.error{background:#3a1717;border-color:#7a2a2a;color:#ffb0b0}
+.empty{color:var(--muted);padding:60px 0;text-align:center}
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:10}
+.modal{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:20px 22px;width:min(720px,94vw);max-height:92vh;overflow:auto}
+.modal h2{margin:0 0 6px;font-size:18px}
+.modal .hint{color:var(--muted);font-size:12px;margin-bottom:6px}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:0 18px}
+.modal .actions{display:flex;justify-content:space-between;margin-top:18px}
+fieldset{border:1px solid var(--border);border-radius:10px;padding:4px 14px 12px;margin:14px 0 0}
+legend{color:var(--muted);font-size:12px;padding:0 6px}
+.spin{display:inline-block;width:12px;height:12px;border:2px solid var(--muted);border-top-color:var(--accent);border-radius:50%;animation:s .8s linear infinite;vertical-align:middle;margin-right:6px}
+@keyframes s{to{transform:rotate(360deg)}}
+.help{color:var(--muted);font-size:12px;margin-top:4px}
+</style>
+</head>
+<body>
+<div class="layout">
+  <aside class="side">
+    <div class="brand">⇄ git-proxy <small>identity replay</small></div>
+    <div class="navsec">
+      <h4>Repo pairs <button class="small" onclick="editPair()">+ New</button></h4>
+      <div id="pairNav"></div>
+    </div>
+    <div class="navsec">
+      <h4>Identity profiles <button class="small" onclick="editProfile()">+ New</button></h4>
+      <div id="profNav"></div>
+    </div>
+    <div style="margin-top:auto;color:var(--muted);font-size:11px" id="homeInfo"></div>
+  </aside>
+  <main class="main" id="main"></main>
+</div>
+<div id="modal"></div>
+<script>
+const TOKEN = "__TOKEN__";
+const S = {profiles:{}, pairs:{}, sel:null, status:null, plan:null, planDir:null, history:[], log:[], busy:false, error:null};
+
+async function api(path, body){
+  const r = await fetch(path, {method: body?'POST':'GET', headers:{'X-GitProxy-Token':TOKEN,'Content-Type':'application/json'}, body: body?JSON.stringify(body):undefined});
+  const j = await r.json();
+  if(!j.ok){ throw new Error(j.error||'request failed'); }
+  return j;
+}
+const esc = s => String(s??'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const short = s => s? s.slice(0,8):'';
+
+async function loadState(){
+  const j = await api('/api/state');
+  S.profiles = j.result.profiles; S.pairs = j.result.pairs;
+  document.getElementById('homeInfo').textContent = 'state: ' + j.result.home;
+  if(S.sel && !S.pairs[S.sel]) S.sel = null;
+  if(!S.sel){ const ids = Object.keys(S.pairs); if(ids.length) S.sel = ids[0]; }
+  renderNav();
+  await refreshPair();
+}
+async function refreshPair(){
+  S.status=null; S.error=null;
+  if(S.sel){
+    try{
+      const [st, hi] = await Promise.all([api('/api/pairs/status?id='+S.sel), api('/api/pairs/history?id='+S.sel)]);
+      S.status = st.result; S.history = hi.result.history;
+    }catch(e){ S.error = e.message; }
+  }
+  render();
+}
+function renderNav(){
+  document.getElementById('pairNav').innerHTML = Object.values(S.pairs).map(p=>`
+    <div class="navitem ${p.id===S.sel?'active':''}" onclick="selectPair('${p.id}')">
+      <div><div>${esc(p.label)}</div><span class="sub">${esc(p.original_path)}</span></div>
+      <button class="small" onclick="event.stopPropagation();editPair('${p.id}')">✎</button>
+    </div>`).join('') || '<div class="help">No pairs yet.</div>';
+  document.getElementById('profNav').innerHTML = Object.values(S.profiles).map(p=>`
+    <div class="navitem" onclick="editProfile('${p.id}')">
+      <div><div>${esc(p.label)}</div><span class="sub">${esc(p.name)} &lt;${esc(p.email)}&gt;</span></div>
+      <span class="pill muted">${esc(p.auth_type)}</span>
+    </div>`).join('') || '<div class="help">No profiles yet.</div>';
+}
+async function selectPair(id){ S.sel=id; S.plan=null; S.log=[]; renderNav(); await refreshPair(); }
+
+function sideCard(s, dir){
+  const prof = s.profile;
+  const state = !s.exists ? '<span class="pill bad">missing</span>' : !s.is_repo ? '<span class="pill warn">not a repo</span>'
+    : s.clean===false ? '<span class="pill warn">uncommitted changes</span>' : '<span class="pill ok">clean</span>';
+  const ident = s.is_repo ? (s.identity_ok ? '<span class="pill ok">identity applied</span>' : '<span class="pill warn">identity differs</span>') : '';
+  const unsynced = s.unsynced==null ? '—' : s.unsynced===0 ? '<span class="pill ok">0 pending</span>' : `<span class="pill warn">${s.unsynced} to send</span>`;
+  const title = s.key==='original' ? 'Original (you)' : 'Mirror (shared copy)';
+  return `<div class="card">
+    <h3>${title} ${state}</h3>
+    <div class="kv">
+      <div class="k">path</div><div class="v">${esc(s.path)||'<i>not set</i>'}</div>
+      <div class="k">branch</div><div class="v">${esc(s.branch)}${s.current_branch && s.current_branch!==s.branch?` <span class="pill warn">checked out: ${esc(s.current_branch)}</span>`:''}</div>
+      <div class="k">HEAD</div><div class="v">${s.head?short(s.head):'<i>no commits</i>'}</div>
+      <div class="k">profile</div><div class="v">${esc(prof.label)} · ${esc(prof.name)} &lt;${esc(prof.email)}&gt;</div>
+      <div class="k">repo ident</div><div class="v">${esc(s.identity||'—')} ${ident}</div>
+      <div class="k">remote</div><div class="v">${esc(s.remote)||(s.has_remote?'origin (set in repo)':'<i>none</i>')}</div>
+      <div class="k">unsynced</div><div class="v">${unsynced}</div>
+    </div>
+    <div class="row">
+      <button class="small" onclick="act('setup','${s.key}')" title="Create the folder / git init if needed, then apply identity + credentials">${s.is_repo?'Apply identity':'Setup repo'}</button>
+      <button class="small" onclick="act('pull','${s.key}')" ${s.is_repo&&(s.has_remote||s.remote)?'':'disabled'} title="git pull --ff-only origin">Pull</button>
+      <button class="small" onclick="act('push','${s.key}')" ${s.is_repo&&(s.has_remote||s.remote)?'':'disabled'} title="git push origin (uses this side's credentials)">Push</button>
+      <button class="small" onclick="preview('${dir}')" ${s.is_repo?'':'disabled'}>Preview →</button>
+    </div>
+  </div>`;
+}
+
+function render(){
+  const m = document.getElementById('main');
+  if(!S.sel){ m.innerHTML = `<div class="empty"><h2>Welcome</h2>Create two identity profiles (your personal one and your alias), then a repo pair.<br><br><button class="primary" onclick="editProfile()">Create a profile</button></div>`; return; }
+  if(S.error && !S.status){ m.innerHTML = `<div class="banner error">${esc(S.error)}</div><button onclick="editPair('${S.sel}')">Edit pair</button>`; return; }
+  if(!S.status){ m.innerHTML = '<div class="empty"><span class="spin"></span>Loading…</div>'; return; }
+  const st = S.status, p = st.pair;
+  let html = `<div class="row" style="justify-content:space-between;margin-bottom:14px">
+    <div><h1 style="margin:0;font-size:22px">${esc(p.label)}</h1>
+      <div class="help">guest identity: <code>${esc(p.guest_name)} &lt;${esc(p.guest_email)}&gt;</code> · ${st.mapped} commits mapped${st.last_sync?` · last sync ${esc(st.last_sync.replace('T',' ').slice(0,19))}`:''}</div></div>
+    <div class="row"><button onclick="refreshPair()">↻ Refresh</button><button onclick="editPair('${p.id}')">Edit pair</button></div></div>`;
+  if(S.error) html += `<div class="banner error">${esc(S.error)}</div>`;
+  if(st.pending){
+    const pe = st.pending;
+    html += `<div class="banner conflict"><b>Sync paused on a conflict</b> (${esc(pe.direction)}, replaying ${pe.sha} “${esc(pe.subject)}” into the ${pe.dst}; ${pe.remaining} more queued).<br>
+      ${pe.unresolved.length?`Unresolved files: <code>${pe.unresolved.map(esc).join(', ')}</code>.<br>`:'All files resolved and staged. '}
+      Open <code>${esc(pe.dst_path)}</code>, fix the conflicts, run <code>git add</code> on them, then press Continue.
+      <div class="row" style="margin-top:8px"><button class="primary" onclick="act('continue')" ${S.busy?'disabled':''}>Continue</button><button class="danger" onclick="act('abort')" ${S.busy?'disabled':''}>Abort (drop this commit and the rest of the queue)</button></div></div>`;
+  }
+  const dis = S.busy||st.pending?'disabled':'';
+  html += `<div class="grid2">${sideCard(st.original,'to-mirror')}
+    <div class="arrows">
+      <button class="primary" ${dis} onclick="sync('to-mirror')" title="Replay your new original commits into the mirror as the alias">Sync → mirror</button>
+      <button class="primary" ${dis} onclick="sync('to-original')" title="Replay new mirror commits into the original; friends become guest">← Sync to original</button>
+      <div class="help" style="text-align:center">${S.busy?'<span class="spin"></span>working…':''}</div>
+    </div>${sideCard(st.mirror,'to-original')}</div>`;
+  if(S.plan){
+    html += `<div class="section"><h2>Preview: ${esc(S.planDir)} <span>${S.plan.length} commit(s) <button class="small" onclick="S.plan=null;render()">✕</button></span></h2><div class="card" style="padding:0;overflow:auto">`;
+    html += S.plan.length ? `<table><tr><th>commit</th><th>action</th><th>author in source</th><th>author after replay</th><th>subject</th></tr>` +
+      S.plan.map(x=>`<tr><td class="mono">${x.short}${x.is_merge?' <span class="pill muted">merge</span>':''}</td><td><span class="pill ${x.action}">${x.action}</span></td><td>${esc(x.from)}</td><td>${esc(x.to)}</td><td>${esc(x.subject)}${x.message_changed?' <span class="pill muted">msg edited</span>':''}</td></tr>`).join('') + '</table>'
+      : '<div class="help" style="padding:14px">Nothing to replay in this direction.</div>';
+    html += `</div></div>`;
+  }
+  html += `<div class="section"><h2>Log <span><button class="small" onclick="S.log=[];render()">clear</button></span></h2><div class="log" id="log">${S.log.map(l=>l.startsWith('error:')?`<span class="err">${esc(l)}</span>`:esc(l)).join('\n')||'<span style="color:var(--muted)">No activity yet.</span>'}</div></div>`;
+  html += `<div class="section"><h2>Replay history</h2><div class="card" style="padding:0;overflow:auto">` + (S.history.length ?
+    `<table><tr><th>when</th><th>direction</th><th>action</th><th>original</th><th>mirror</th><th>author</th><th>subject</th></tr>` +
+    S.history.slice(0,100).map(e=>`<tr><td class="mono">${esc((e.time||'').replace('T',' ').slice(0,16))}</td><td>${esc(e.direction)}</td><td><span class="pill ${e.action}">${e.action}</span></td><td class="mono">${short(e.original)||'—'}</td><td class="mono">${short(e.mirror)||'—'}</td><td>${esc(e.src_author)} → ${esc(e.dst_author)}</td><td>${esc(e.subject)}</td></tr>`).join('') + '</table>'
+    : '<div class="help" style="padding:14px">Nothing replayed yet.</div>') + '</div></div>';
+  m.innerHTML = html;
+  const lg = document.getElementById('log'); if(lg) lg.scrollTop = lg.scrollHeight;
+}
+
+async function preview(dir){
+  S.busy=true; render();
+  try{ const j = await api(`/api/pairs/plan?id=${S.sel}&direction=${dir}`); S.plan=j.result.plan; S.planDir=dir; S.error=null; }
+  catch(e){ S.error=e.message; }
+  S.busy=false; render();
+}
+async function sync(dir){
+  if(!confirm(`Replay commits ${dir.replace('-',' ')}?`)) return;
+  await act('sync', null, dir);
+}
+async function act(action, side, direction){
+  S.busy=true; S.error=null; render();
+  try{
+    const j = await api('/api/pairs/action', {id:S.sel, action, side, direction});
+    S.log.push(`$ ${action}${side?' '+side:''}${direction?' '+direction:''}`, ...(j.log||[]));
+  }catch(e){ S.log.push('error: '+e.message); S.error = e.message; }
+  S.busy=false; S.plan=null;
+  await refreshPair();
+}
+
+// ---------- modals
+function closeModal(){ document.getElementById('modal').innerHTML=''; }
+function profileOptions(sel){ return `<option value="">— choose —</option>` + Object.values(S.profiles).map(p=>`<option value="${p.id}" ${p.id===sel?'selected':''}>${esc(p.label)} (${esc(p.name)})</option>`).join(''); }
+
+function editProfile(id){
+  const p = S.profiles[id] || {id:'',label:'',name:'',email:'',auth_type:'none',username:'',token:'',host:'github.com',ssh_key:'',disable_signing:false,has_token:false};
+  document.getElementById('modal').innerHTML = `<div class="modal-bg" onclick="if(event.target===this)closeModal()"><div class="modal">
+    <h2>${id?'Edit':'New'} identity profile</h2>
+    <div class="hint">An identity = the name/email stamped on commits, plus the credentials used to push. Make one for your personal account and one for your alias.</div>
+    <form id="pf" onsubmit="saveProfile(event,'${p.id}')">
+    <div class="cols">
+      <div><label>Label</label><input name="label" value="${esc(p.label)}" placeholder="e.g. Alias / Personal"></div>
+      <div></div>
+      <div><label>Commit name</label><input name="name" value="${esc(p.name)}" required></div>
+      <div><label>Commit email</label><input name="email" value="${esc(p.email)}" required></div>
+    </div>
+    <fieldset><legend>Push credentials</legend>
+      <label>Auth type</label>
+      <select name="auth_type" onchange="authToggle(this.value)"><option value="none" ${p.auth_type==='none'?'selected':''}>None (use whatever git already has)</option><option value="https" ${p.auth_type==='https'?'selected':''}>HTTPS + personal access token</option><option value="ssh" ${p.auth_type==='ssh'?'selected':''}>SSH key</option></select>
+      <div id="auth-https" ${p.auth_type==='https'?'':'hidden'}>
+        <div class="cols">
+          <div><label>Host</label><input name="host" value="${esc(p.host)}" placeholder="github.com"></div>
+          <div><label>Username</label><input name="username" value="${esc(p.username)}"></div>
+        </div>
+        <label>Token ${p.has_token?'<span class="pill ok">stored</span> leave blank to keep':''}</label><input name="token" type="password" autocomplete="off" placeholder="${p.has_token?'••••••••':'ghp_…'}">
+        <div class="help">Stored in plain text under the state directory and wired into the repo with a repo-local <code>credential.helper</code>, so global helpers (keychain / Windows Credential Manager) are bypassed for that repo.</div>
+      </div>
+      <div id="auth-ssh" ${p.auth_type==='ssh'?'':'hidden'}>
+        <label>Private key path</label><input name="ssh_key" value="${esc(p.ssh_key)}" placeholder="~/.ssh/id_ed25519_alias">
+        <div class="help">Sets <code>core.sshCommand</code> for the repo with <code>IdentitiesOnly=yes</code>.</div>
+      </div>
+    </fieldset>
+    <label class="inline"><input type="checkbox" name="disable_signing" ${p.disable_signing?'checked':''}> Disable commit/tag signing in repos using this identity (recommended for the alias so your personal GPG/SSH key never signs)</label>
+    <div class="actions"><div>${id?`<button type="button" class="danger" onclick="delProfile('${id}')">Delete</button>`:''}</div><div class="row"><button type="button" onclick="closeModal()">Cancel</button><button class="primary">Save</button></div></div>
+    </form></div></div>`;
+}
+function authToggle(v){ document.getElementById('auth-https').hidden = v!=='https'; document.getElementById('auth-ssh').hidden = v!=='ssh'; }
+async function saveProfile(ev,id){
+  ev.preventDefault();
+  const f = new FormData(ev.target); const prof = Object.fromEntries(f.entries()); prof.id=id; prof.disable_signing = f.get('disable_signing')==='on';
+  try{ await api('/api/profiles/save',{profile:prof}); closeModal(); await loadState(); }catch(e){ alert(e.message); }
+}
+async function delProfile(id){ if(!confirm('Delete this profile?')) return; await api('/api/profiles/delete',{id}); closeModal(); await loadState(); }
+
+function editPair(id){
+  const p = S.pairs[id] || {id:'',label:'',original_path:'',original_profile:'',original_branch:'main',original_remote:'',mirror_path:'',mirror_profile:'',mirror_branch:'main',mirror_remote:'',guest_name:'guest',guest_email:'guest@users.noreply.local',my_emails:[],scrub:true,rewrite_messages:true,strip_trailers:['Co-authored-by']};
+  document.getElementById('modal').innerHTML = `<div class="modal-bg" onclick="if(event.target===this)closeModal()"><div class="modal">
+    <h2>${id?'Edit':'New'} repo pair</h2>
+    <div class="hint">The <b>original</b> is your personal repo. The <b>mirror</b> is the copy you share with friends; if the folder does not exist yet it will be created on Setup.</div>
+    <form onsubmit="savePair(event,'${p.id}')">
+    <label>Label</label><input name="label" value="${esc(p.label)}" placeholder="my-project">
+    <div class="cols">
+      <fieldset><legend>Original (you)</legend>
+        <label>Path</label><input name="original_path" value="${esc(p.original_path)}" required placeholder="/Users/me/repos/project or C:\\Users\\me\\project">
+        <label>Identity profile</label><select name="original_profile">${profileOptions(p.original_profile)}</select>
+        <label>Branch</label><input name="original_branch" value="${esc(p.original_branch)}">
+        <label>Remote URL (optional)</label><input name="original_remote" value="${esc(p.original_remote)}" placeholder="leave blank to keep existing origin">
+      </fieldset>
+      <fieldset><legend>Mirror (shared)</legend>
+        <label>Path</label><input name="mirror_path" value="${esc(p.mirror_path)}" required placeholder="/Users/me/repos/project-mirror">
+        <label>Identity profile (alias)</label><select name="mirror_profile">${profileOptions(p.mirror_profile)}</select>
+        <label>Branch</label><input name="mirror_branch" value="${esc(p.mirror_branch)}">
+        <label>Remote URL (optional)</label><input name="mirror_remote" value="${esc(p.mirror_remote)}" placeholder="https://github.com/alias/project.git">
+      </fieldset>
+    </div>
+    <fieldset><legend>Rules</legend>
+      <div class="cols">
+        <div><label>Guest name (friends' commits appear as this in the original)</label><input name="guest_name" value="${esc(p.guest_name)}"></div>
+        <div><label>Guest email</label><input name="guest_email" value="${esc(p.guest_email)}"></div>
+      </div>
+      <label>Extra emails that count as "me" (comma separated)</label><input name="my_emails" value="${esc((p.my_emails||[]).join(', '))}" placeholder="old@address.com, work@company.com">
+      <label>Trailers to remove from my commit messages (comma separated, case-insensitive)</label><input name="strip_trailers" value="${esc((p.strip_trailers||[]).join(', '))}" placeholder="Co-authored-by, Signed-off-by">
+      <div class="help">Removes lines like <code>Co-authored-by: Copilot &lt;…&gt;</code> from commits that get re-authored (yours). Friends' commits are never edited.</div>
+      <label class="inline"><input type="checkbox" name="rewrite_messages" ${p.rewrite_messages?'checked':''}> Also replace my name/email inside commit messages (e.g. Signed-off-by lines)</label>
+      <label class="inline"><input type="checkbox" name="scrub" ${p.scrub?'checked':''}> Scrub unreachable objects after each sync (<code>git gc --prune=now</code>), so the original commits never linger in the mirror's object store</label>
+    </fieldset>
+    <div class="actions"><div>${id?`<button type="button" class="danger" onclick="delPair('${id}')">Delete pair</button>`:''}</div><div class="row"><button type="button" onclick="closeModal()">Cancel</button><button class="primary">Save</button></div></div>
+    </form></div></div>`;
+}
+async function savePair(ev,id){
+  ev.preventDefault();
+  const f = new FormData(ev.target); const pair = Object.fromEntries(f.entries()); pair.id=id; pair.scrub=f.get('scrub')==='on'; pair.rewrite_messages=f.get('rewrite_messages')==='on';
+  try{ const j = await api('/api/pairs/save',{pair}); closeModal(); S.sel=j.result.id; await loadState(); }catch(e){ alert(e.message); }
+}
+async function delPair(id){ if(!confirm('Delete this pair and its commit mapping? (Repos are not touched.)')) return; await api('/api/pairs/delete',{id}); closeModal(); S.sel=null; await loadState(); }
+
+loadState().catch(e=>{ document.getElementById('main').innerHTML = `<div class="banner error">${esc(e.message)}</div>`; });
+</script>
+</body>
+</html>
