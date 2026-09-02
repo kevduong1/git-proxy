@@ -24,6 +24,9 @@ mirror runs `git gc --prune=now` so the original commit objects never linger in 
 The mirror gets a repo-local `user.name`/`user.email`, a repo-local credential helper (HTTPS token) or
 `core.sshCommand` (SSH key) for pushing, and commit signing disabled, so nothing global has to change.
 
+See [USER_GUIDE.md](USER_GUIDE.md) for a step-by-step walkthrough and [AGENTS.md](AGENTS.md) for
+contributor / AI-agent notes.
+
 ## Requirements
 
 - git 2.29+
