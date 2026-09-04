@@ -36,9 +36,13 @@ USER_GUIDE.md           step-by-step usage
   mapping and runs `decide()` on each, producing a `Planned` with an `action`:
   `rewrite` (mine → alias), `keep` (verbatim), `restore` (alias → me), `guest` (others → guest).
 - `sync()` fetches the source's objects into the destination (`git fetch <path> <branch>`, no remote
-  is added, FETCH_HEAD is removed), then for each planned commit: `cherry-pick --no-commit`
-  (merges use `-m 1`), then `git commit` with explicit `--author`, `--date`, and `GIT_COMMITTER_*` env,
-  `--no-verify --no-gpg-sign`. Empty results are recorded as `skipped` with a null destination sha.
+  is added, FETCH_HEAD is removed), then tries `_exact_replay()`: every queued commit is recreated with
+  `git commit-tree <src tree> -p <mapped parent>...`, no worktree involved, merges preserved, conflicts
+  impossible. It applies when the destination branch can fast-forward to the result. Otherwise (both sides
+  have new commits, or a parent was mapped to nothing) it falls back to `_replay_queue()`: for each commit
+  `cherry-pick --no-commit` (merges use `-m 1`) then `git commit` with explicit `--author`, `--date`, and
+  `GIT_COMMITTER_*` env, `--no-verify --no-gpg-sign`. Empty results are recorded as `skipped` with a null
+  destination sha.
 - On conflict the queue is persisted (`store.save_pending`) and `sync()` returns `status: "conflict"`.
   `continue_sync()` commits the staged resolution and drains the queue; `abort_sync()` hard-resets to the
   head recorded before the failing commit.

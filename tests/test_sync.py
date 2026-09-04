@@ -191,8 +191,10 @@ class SyncTests(unittest.TestCase):
         git(self.mirror, "merge", "-q", "--no-ff", "-m", "Merge feature", "feature", name="Friend", email="friend@example.com")
         res = self.engine().sync(TO_ORIGINAL, lambda *_: None)
         self.assertEqual(res["status"], "ok")
-        self.assertEqual(res["replayed"], 2)
-        self.assertEqual(res["skipped"], 1)  # the merge itself is empty once both sides are replayed
+        self.assertEqual((res["replayed"], res["skipped"]), (3, 0))
+        # merge shape preserved, no conflict even though it is a real merge
+        self.assertEqual(git(self.orig, "rev-list", "--merges", "--count", "HEAD").strip(), "1")
+        self.assertEqual(git(self.orig, "log", "-1", "--format=%an|%cn", "HEAD").strip(), "guest|Kevin Real")
         self.assertTrue((self.orig / "feat.txt").exists())
         self.assertTrue((self.orig / "main.txt").exists())
         self.assertEqual(self.engine().plan(TO_ORIGINAL), [])
@@ -209,6 +211,29 @@ class SyncTests(unittest.TestCase):
         commit(self.mirror, "b.txt", "b\n", "Friend work\n\nCo-authored-by: Pal <pal@x.com>", friend)
         self.engine().sync(self.sync.TO_ORIGINAL, lambda *_: None)
         self.assertIn("Co-authored-by: Pal", git(self.orig, "log", "-1", "--format=%B"))
+
+    def test_conflicting_merge_replays_without_conflict(self):
+        """A merge whose resolution was done by hand used to conflict when replayed linearly."""
+        TO_MIRROR = self.sync.TO_MIRROR
+        commit(self.orig, "f", "a\nb\nc\n", "base", PERSONAL)
+        git(self.orig, "checkout", "-q", "-b", "feature")
+        commit(self.orig, "f", "a\nB-feature\nc\n", "feature edits b", PERSONAL)
+        git(self.orig, "checkout", "-q", "main")
+        commit(self.orig, "f", "a\nB-main\nc\n", "main edits b", PERSONAL)
+        r = subprocess.run(["git", "merge", "feature"], cwd=self.orig, capture_output=True, text=True)
+        self.assertNotEqual(r.returncode, 0)  # conflict in the original, resolved by hand:
+        commit(self.orig, "f", "a\nB-merged\nc\n", "Merge feature (resolved)", PERSONAL)
+        self.engine().setup("mirror", lambda *_: None)
+        res = self.engine().sync(TO_MIRROR, lambda *_: None)
+        self.assertEqual((res["status"], res["replayed"]), ("ok", 4))
+        self.assertEqual((self.mirror / "f").read_text(), "a\nB-merged\nc\n")
+        self.assertEqual(git(self.mirror, "rev-parse", "HEAD^{tree}"), git(self.orig, "rev-parse", "HEAD^{tree}"))
+        self.assertEqual({a for a, *_ in log(self.mirror)}, {"shadowdev"})
+        # a later plain commit still fast-forwards exactly
+        commit(self.orig, "g", "g\n", "after merge", PERSONAL)
+        res = self.engine().sync(TO_MIRROR, lambda *_: None)
+        self.assertEqual((res["status"], res["replayed"]), ("ok", 1))
+        self.assertEqual(self.engine().plan(TO_MIRROR), [])
 
     def test_https_credentials_apply(self):
         cfg = self.store.load_config()

@@ -375,7 +375,74 @@ class Engine:
             return {"status": "nothing", "replayed": 0, "skipped": 0}
         log(f"{len(queue)} commit(s) to replay {src.key} -> {dst.key}")
         self._fetch(src, dst, log)
+        exact = self._exact_replay(direction, src, dst, queue, log)
+        if exact is not None:
+            return exact
+        log(f"[{dst.key}] has commits of its own; rebasing the new {src.key} commits onto it one by one")
         return self._replay_queue(direction, src, dst, queue, log)
+
+    # -- exact replay (fast-forward case)
+
+    def _exact_replay(self, direction, src: Side, dst: Side, queue: list, log):
+        """Recreate every queued commit with its exact tree and its mapped parents (git commit-tree).
+
+        This never touches the working tree and can never conflict, and merge commits keep their
+        shape. It only works when the destination branch is fast-forwardable to the result, i.e.
+        the destination has no commits of its own since the last sync. Returns None otherwise so
+        the caller can fall back to the cherry-pick (rebase-style) path.
+        """
+        dst_head = head_sha(dst.path)
+        counterpart = {}
+        for e in self.map["entries"]:
+            if e.get("original") and e.get("mirror"):
+                if direction == TO_MIRROR:
+                    counterpart[e["original"]] = e["mirror"]
+                else:
+                    counterpart[e["mirror"]] = e["original"]
+        created = []  # (Planned, new_sha)
+        for p in queue:
+            parents = []
+            for ps in p.commit.parents:
+                m = counterpart.get(ps)
+                if not m:
+                    log(f"[{dst.key}] {p.commit.sha[:8]} has a parent the {dst.key} does not have; cannot replay exactly")
+                    return None
+                parents.append(m)
+            new_sha = self._commit_tree(dst, p, parents)
+            counterpart[p.commit.sha] = new_sha
+            created.append((p, new_sha))
+        src_tip = run(["rev-parse", f"refs/heads/{src.branch}"], cwd=src.path).stdout.strip()
+        new_tip = counterpart.get(src_tip)
+        if not new_tip:
+            return None
+        if dst_head is not None:
+            ff = run(["merge-base", "--is-ancestor", dst_head, new_tip], cwd=dst.path, check=False).returncode == 0
+            if not ff:
+                return None  # dangling commits are pruned by the scrub step / a later gc
+        run(["reset", "--quiet", "--hard", new_tip], cwd=dst.path)
+        for p, new_sha in created:
+            self._record(direction, p, new_sha)
+            kind = "merge   " if p.commit.is_merge else p.action
+            log(f"  {kind:<8} {p.commit.sha[:8]} -> {new_sha[:8]}  {p.new_name} <{p.new_email}>  {p.commit.subject}")
+        self._finish(dst, log)
+        log(f"Done: {len(created)} replayed exactly (history shape preserved), 0 skipped.")
+        return {"status": "ok", "replayed": len(created), "skipped": 0}
+
+    def _commit_tree(self, dst: Side, p: Planned, parents: list) -> str:
+        c = p.commit
+        env = {
+            "GIT_AUTHOR_NAME": p.new_name,
+            "GIT_AUTHOR_EMAIL": p.new_email,
+            "GIT_AUTHOR_DATE": c.author_date,
+            "GIT_COMMITTER_NAME": p.committer_name,
+            "GIT_COMMITTER_EMAIL": p.committer_email,
+            "GIT_COMMITTER_DATE": c.committer_date,
+        }
+        args = ["-c", "commit.gpgsign=false", "commit-tree", "--no-gpg-sign", f"{c.sha}^{{tree}}"]
+        for ps in parents:
+            args += ["-p", ps]
+        args += ["-F", "-"]
+        return run(args, cwd=dst.path, env=env, input=p.message + "\n").stdout.strip()
 
     def _fetch(self, src: Side, dst: Side, log):
         args = ["fetch", "--quiet", "--no-tags", "--no-write-fetch-head", src.path, src.branch]

@@ -81,9 +81,10 @@ replayed commit and drops the paused queue (nothing already replayed is lost).
 
 ## Notes and caveats
 
-- Sync is linear, like a rebase: commits are cherry-picked one by one onto the destination branch. Merge
-  commits are applied against their first parent, which normally makes them empty (skipped) once both sides
-  have been replayed. Conflict resolutions inside merge commits may need a manual resolve.
+- When the destination has no commits of its own since the last sync (the normal case), every commit is
+  recreated with its exact tree and parents, so merges keep their shape and conflicts are impossible.
+  Only when *both* sides have new commits does the sync fall back to cherry-picking the new commits one by
+  one onto the destination (like a rebase), which is where a conflict can occur.
 - Both repos should be on their configured branch with no uncommitted changes when syncing.
 - Never `git fetch`/`git pull` directly between the two repos, and never push the original to the alias
   remote; that would leak the real commits. Always go through the sync.

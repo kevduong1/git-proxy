@@ -151,8 +151,10 @@ The scrub step already removed the personal commit objects from the mirror's obj
 
 ### Both sides have new commits
 
-Do mirror → original first, then original → mirror. The replay works like a rebase, so the commit order
-differs slightly between the two repos, but the resulting file trees are identical.
+Do mirror → original first, then original → mirror. In this situation the second sync works like a rebase
+(the new commits are cherry-picked one by one onto the other side), so the commit order differs slightly
+between the two repos, but the resulting file trees are identical. This is the only situation in which a
+conflict can happen; when one side is simply behind, commits are copied exactly, merges included.
 
 ### Committing directly in the mirror
 
